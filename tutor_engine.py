@@ -1,44 +1,31 @@
 """
 tutor_engine.py
 Motor principal do uRobot Tutor.
-Usa Ollama (local) + LangChain + ChromaDB para RAG completo.
 """
 
-import os
-import re
 from pathlib import Path
-from typing import Optional
-
-# LangChain
-from langchain_community.llms import Ollama
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_ollama import OllamaLLM, OllamaEmbeddings
+from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import PromptTemplate
 
-# ── Configuração ──────────────────────────────────────────────────────────────
-
-MODEL_NAME   = "llama3"          # muda para "mistral", "phi3", etc. se quiseres
-EMBED_MODEL  = "nomic-embed-text"  # modelo de embeddings local
-CHROMA_DIR   = "./chroma_db"     # diretório local da base de dados vetorial
-CHUNK_SIZE   = 800
-CHUNK_OVERLAP= 100
-
-# ── Prompts ───────────────────────────────────────────────────────────────────
+MODEL_NAME    = "llama3"
+EMBED_MODEL   = "nomic-embed-text"
+CHROMA_DIR    = "./chroma_db"
+CHUNK_SIZE    = 800
+CHUNK_OVERLAP = 100
 
 QA_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
-    template="""És um tutor académico. Responde em português de Portugal de forma clara e direta.
+    template="""Es um tutor academico. Responde em portugues de Portugal de forma clara e direta.
 
-Usa APENAS o conteúdo educativo do contexto abaixo. Ignora completamente qualquer texto que pareça ser
-menus de websites, rodapés, avisos de cookies, URLs, datas de publicação, nomes de autores ou
-qualquer outro conteúdo que não seja matéria de estudo.
+REGRA IMPORTANTE: Usa APENAS o conteudo educativo do contexto abaixo para responder.
+Se a informacao nao estiver no contexto, responde exatamente com:
+"Nao encontrei informacao sobre este tema nos materiais carregados."
+Nao uses conhecimento proprio. Nao inventes. Nao copies URLs, menus ou rodapes de websites.
 
-Se não encontrares informação relevante sobre a pergunta, diz isso claramente.
-Não incluas URLs, nomes de sites ou lixo de páginas web na resposta.
-
-Contexto:
+Contexto dos materiais:
 {context}
 
 Pergunta: {question}
@@ -46,78 +33,98 @@ Pergunta: {question}
 Resposta:"""
 )
 
-SUMMARY_PROMPT = """És um tutor académico. Responde em português de Portugal.
+SUMMARY_PROMPT = """Es um tutor academico. Responde em portugues de Portugal.
 
-Cria um resumo estruturado sobre o tópico: "{topic}".
-Usa apenas o conteúdo educativo dos materiais abaixo.
-Ignora menus, rodapés, URLs, avisos de cookies e qualquer texto que não seja matéria de estudo.
+Cria um resumo DETALHADO e COMPLETO sobre o topico: "{topic}".
+Usa apenas o conteudo educativo dos materiais abaixo.
+Ignora menus, rodapes, URLs, avisos de cookies e qualquer texto que nao seja materia.
+Se nao houver informacao suficiente nos materiais, diz isso claramente.
 
 Materiais:
 {context}
 
-Escreve o resumo com esta estrutura:
-**Conceito principal**
-[definição clara]
+Escreve um resumo longo e detalhado com esta estrutura:
 
-**Pontos-chave**
-- ponto 1
-- ponto 2
-- ponto 3
+## Conceito principal
+Explicacao clara e completa do conceito, com pelo menos 3-4 paragrafos.
 
-**O que deves reter**
-[conclusão breve]"""
+## Contexto e enquadramento
+Onde se insere este tema, origem, importancia.
 
-QUIZ_PROMPT = """Create a quiz in European Portuguese about: "{topic}".
-Use the materials below as reference. Ignore any website menus, footers, URLs or non-educational text.
+## Pontos-chave
+- Ponto detalhado 1 com explicacao
+- Ponto detalhado 2 com explicacao
+- Ponto detalhado 3 com explicacao
+- Ponto detalhado 4 com explicacao
+- Ponto detalhado 5 com explicacao
 
-Materials:
+## Detalhes importantes
+Explicacao aprofundada dos aspectos mais relevantes, exemplos concretos, casos de uso.
+
+## Relacao com outros conceitos
+Como este tema se relaciona com outras ideias ou areas.
+
+## O que deves reter
+Conclusao clara com os pontos mais importantes para memorizar."""
+
+QUIZ_PROMPT = """You are creating a multiple choice quiz in European Portuguese about: "{topic}".
+
+Reference materials:
 {context}
 
-YOU MUST respond with ONLY a valid JSON array. No explanation, no markdown, no text before or after.
-Start your response with [ and end with ]
+CRITICAL INSTRUCTION: You MUST respond with ONLY a JSON array.
+Do NOT write any text before or after the JSON.
+Do NOT use markdown code blocks.
+Do NOT explain anything.
+Your entire response must start with [ and end with ]
 
+Required format:
 [
   {{
-    "question": "Pergunta em portugues?",
-    "options": ["opcao A", "opcao B", "opcao C", "opcao D"],
+    "question": "Pergunta completa em portugues de Portugal?",
+    "options": ["Opcao A completa", "Opcao B completa", "Opcao C completa", "Opcao D completa"],
     "correct": 0,
-    "explanation": "Explicacao breve em portugues."
+    "explanation": "Explicacao detalhada de porque esta opcao e a correta."
   }}
 ]
 
-"correct" is the index (0, 1, 2 or 3) of the correct option.
-Generate exactly {n} questions. Respond with JSON only."""
+Rules:
+- "correct" is the integer index (0, 1, 2 or 3) of the correct answer in "options"
+- All text must be in European Portuguese
+- Questions must be based ONLY on the reference materials
+- Generate exactly {n} questions
+- Make wrong options plausible but clearly incorrect
 
-CHAT_PROMPT = """És um tutor académico. Responde em português de Portugal de forma clara e direta.
+Respond with the JSON array only:"""
 
-Usa o conteúdo educativo dos materiais abaixo para responder.
-Ignora completamente menus, rodapés, URLs, avisos de cookies ou qualquer texto que não seja matéria.
-Não copies URLs nem nomes de sites para a resposta.
+CHAT_PROMPT = """Es um tutor academico. Responde em portugues de Portugal de forma clara e direta.
+
+REGRA IMPORTANTE: Usa APENAS o conteudo educativo dos materiais abaixo para responder.
+Se a informacao nao estiver nos materiais, responde:
+"Nao encontrei informacao sobre este tema nos materiais carregados."
+Nao uses conhecimento proprio. Nao inventes. Nao copies URLs, menus ou rodapes.
 
 Materiais:
 {context}
 
-Histórico:
+Historico da conversa:
 {history}
 
 Pergunta do aluno: {question}
 Resposta do tutor:"""
 
 
-# ── Motor ─────────────────────────────────────────────────────────────────────
-
 class TutorEngine:
     def __init__(self):
-        print("🔧 A inicializar TutorEngine...")
-
-        self.llm = Ollama(model=MODEL_NAME, temperature=0.3)
+        print("A inicializar TutorEngine...")
+        self.llm = OllamaLLM(model=MODEL_NAME, temperature=0.2)
         self.embeddings = OllamaEmbeddings(model=EMBED_MODEL)
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP,
         )
         self._init_vectorstore()
-        print(f"✅ Motor pronto. Modelo: {MODEL_NAME}")
+        print(f"Motor pronto. Modelo: {MODEL_NAME}")
 
     def _init_vectorstore(self):
         self.vectorstore = Chroma(
@@ -126,13 +133,10 @@ class TutorEngine:
             persist_directory=CHROMA_DIR,
         )
 
-    # ── Carregar documentos ───────────────────────────────────────────────────
-
     def load_document(self, filepath: str) -> str:
         path = Path(filepath)
         if not path.exists():
-            return f"❌ Ficheiro não encontrado: {path.name}"
-
+            return f"Ficheiro nao encontrado: {path.name}"
         try:
             ext = path.suffix.lower()
             if ext == ".pdf":
@@ -140,22 +144,15 @@ class TutorEngine:
             elif ext in (".txt", ".md"):
                 loader = TextLoader(str(path), encoding="utf-8")
             else:
-                return f"⚠️ Formato não suportado: {ext}"
-
+                return f"Formato nao suportado: {ext}"
             docs = loader.load()
             chunks = self.splitter.split_documents(docs)
-
-            # Adiciona metadado com nome do ficheiro
             for chunk in chunks:
                 chunk.metadata["source_file"] = path.name
-
             self.vectorstore.add_documents(chunks)
-            return f"✅ {path.name} — {len(chunks)} fragmentos indexados."
-
+            return f"{path.name} — {len(chunks)} fragmentos indexados."
         except Exception as e:
-            return f"❌ Erro ao carregar {path.name}: {str(e)}"
-
-    # ── Info da coleção ───────────────────────────────────────────────────────
+            return f"Erro ao carregar {path.name}: {str(e)}"
 
     def get_collection_info(self) -> dict:
         try:
@@ -170,7 +167,11 @@ class TutorEngine:
         except Exception:
             return {"total_docs": 0, "files": []}
 
-    # ── Retriever helper ──────────────────────────────────────────────────────
+    def _has_docs(self) -> bool:
+        try:
+            return self.vectorstore._collection.count() > 0
+        except Exception:
+            return False
 
     def _get_context(self, query: str, k: int = 5) -> str:
         try:
@@ -181,70 +182,83 @@ class TutorEngine:
         except Exception:
             return ""
 
-    # ── Chat ──────────────────────────────────────────────────────────────────
+    def _is_relevant(self, query: str, context: str) -> bool:
+        """
+        Verifica se a query tem relacao com o contexto recuperado
+        comparando palavras-chave. Bloqueia topicos sem qualquer
+        sobreposicao com os documentos (ex: Benfica num PDF de LLMs).
+        """
+        if not context:
+            return False
+        # Palavras com mais de 3 letras (ignora artigos, preposicoes)
+        query_words = set(w.lower().strip(".,?!") for w in query.split() if len(w) > 3)
+        context_words = set(w.lower().strip(".,?!") for w in context.split() if len(w) > 3)
+        if not query_words:
+            return True
+        overlap = query_words & context_words
+        return len(overlap) >= 1
 
     def ask(self, question: str, history: list) -> str:
-        context = self._get_context(question)
+        if not self._has_docs():
+            return "Nao ha materiais carregados. Carrega um PDF ou ficheiro de texto na barra lateral."
 
-        # Formata histórico
+        context = self._get_context(question, k=5)
+        if not context or not self._is_relevant(question, context):
+            return "Nao encontrei informacao sobre este tema nos materiais carregados."
+
         history_text = ""
-        for msg in history[-6:]:  # últimas 3 trocas
+        for msg in history[-6:]:
             role = "Aluno" if msg["role"] == "user" else "Tutor"
             history_text += f"{role}: {msg['content']}\n"
 
-        if context:
-            prompt = CHAT_PROMPT.format(
-                context=context,
-                history=history_text,
-                question=question,
-            )
-        else:
-            prompt = f"""És um tutor académico. Responde em português de Portugal.
-{history_text}
-Aluno: {question}
-Tutor:"""
-
+        prompt = CHAT_PROMPT.format(
+            context=context,
+            history=history_text,
+            question=question,
+        )
         try:
             return self.llm.invoke(prompt)
         except Exception as e:
-            return f"❌ Erro ao contactar o Ollama: {e}\n\nVerifica se o Ollama está a correr com `ollama serve`."
-
-    # ── Resumo ────────────────────────────────────────────────────────────────
+            return f"Erro ao contactar o Ollama: {e}"
 
     def summarize(self, topic: str) -> str:
-        context = self._get_context(topic, k=6)
-        if not context:
-            context = "(sem materiais carregados — responde com conhecimento geral)"
+        if not self._has_docs():
+            return "Nao ha materiais carregados. Carrega um PDF ou ficheiro de texto primeiro."
+
+        context = self._get_context(topic, k=8)
+        if not context or not self._is_relevant(topic, context):
+            return "Nao encontrei informacao sobre este topico nos materiais carregados."
 
         prompt = SUMMARY_PROMPT.format(topic=topic, context=context)
         try:
             return self.llm.invoke(prompt)
         except Exception as e:
-            return f"❌ Erro ao gerar resumo: {e}"
-
-    # ── Questionário ──────────────────────────────────────────────────────────
+            return f"Erro ao gerar resumo: {e}"
 
     def generate_quiz(self, topic: str, n: int = 5) -> str:
-        context = self._get_context(topic, k=6)
+        if not self._has_docs():
+            return '[]'
+
+        context = self._get_context(topic, k=8)
         if not context:
-            context = "(sem materiais carregados — usa conhecimento geral)"
+            return '[]'
 
         prompt = QUIZ_PROMPT.format(topic=topic, context=context, n=n)
         try:
-            return self.llm.invoke(prompt)
-        except Exception as e:
-            return f"❌ Erro ao gerar questionário: {e}"
-
-    # ── Reset ─────────────────────────────────────────────────────────────────
+            raw = self.llm.invoke(prompt)
+            raw = raw.strip().replace("```json", "").replace("```", "").strip()
+            start = raw.find("[")
+            end = raw.rfind("]")
+            if start != -1 and end != -1:
+                return raw[start:end+1]
+            return '[]'
+        except Exception:
+            return '[]'
 
     def reset_collection(self) -> str:
         try:
-            self.vectorstore._collection.delete(
-                where={"source_file": {"$ne": ""}}
-            )
-            # Alternativa mais agressiva: apaga tudo
             self.vectorstore.delete_collection()
             self._init_vectorstore()
-            return "🗑️ Base de dados limpa com sucesso."
+            return "Base de dados limpa."
         except Exception as e:
-            return f"⚠️ Erro ao limpar: {e}"
+            return f"Erro ao limpar: {e}"

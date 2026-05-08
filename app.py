@@ -97,6 +97,11 @@ body, .gradio-container, .gradio-container > div {
 footer, .gr-footer { display: none !important; }
 .gradio-container { padding: 0 !important; max-width: 100% !important; overflow: hidden; }
 
+/* Scroll fixes */
+.panel { overflow-y: auto !important; }
+.chat-col { overflow-y: hidden !important; }
+.chatbot-wrap, .chat-col > div:first-child { flex: 1 !important; overflow-y: auto !important; }
+
 /* Layout */
 .app-layout {
     display: flex !important;
@@ -296,12 +301,18 @@ footer, .gr-footer { display: none !important; }
 
 /* Panel */
 .panel {
-    flex: 1 !important;
     overflow-y: auto !important;
-    padding: 28px 32px !important;
+    overflow-x: hidden !important;
+    padding: 28px 32px 60px !important;
     max-width: 700px !important;
     margin: 0 auto !important;
     width: 100% !important;
+}
+
+/* Wrapper that actually scrolls */
+.tab-wrap > div:last-child > div {
+    overflow-y: auto !important;
+    height: calc(100vh - 49px) !important;
 }
 .panel-title { font-size: 1.1rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .panel-desc  { font-size: 0.82rem; color: var(--muted); margin-bottom: 20px; }
@@ -376,6 +387,13 @@ button {
     margin-top: 14px !important;
     min-height: 80px !important;
     box-shadow: var(--shadow) !important;
+}
+
+/* The panel itself scrolls - remove fixed height from output-card */
+.tab-content-scroll {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    height: calc(100vh - 49px) !important;
 }
 .output-card p, .output-card li, .output-card span { color: var(--text) !important; font-size: 0.88rem !important; line-height: 1.8 !important; }
 .output-card strong { color: var(--accent) !important; font-weight: 600 !important; }
