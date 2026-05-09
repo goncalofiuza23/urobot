@@ -43,19 +43,98 @@ def make_summary(topic):
     return engine.summarize(topic)
 
 def make_quiz(topic, n):
+    import json as _json
     if not topic.strip():
-        return ""
+        return '<p style="color:#6b7280;font-size:0.84rem">Escreve um topico para gerar o questionario.</p>'
     raw = engine.generate_quiz(topic, int(n))
-    # Try to extract JSON from the response
-    raw = raw.strip()
-    # Remove markdown code blocks if present
-    raw = raw.replace("```json", "").replace("```", "").strip()
-    # Find JSON array
+    raw = raw.strip().replace("```json", "").replace("```", "").strip()
     start = raw.find("[")
     end = raw.rfind("]")
-    if start != -1 and end != -1:
-        raw = raw[start:end+1]
-    return raw
+    if start == -1 or end == -1:
+        return '<p style="color:#ef4444;font-size:0.84rem">O modelo nao gerou um questionario valido. Tenta novamente.</p>'
+    raw = raw[start:end+1]
+    if raw == "[]":
+        return '<p style="color:#ef4444;font-size:0.84rem">Nao encontrei informacao suficiente sobre este topico nos materiais carregados.</p>'
+    try:
+        questions = _json.loads(raw)
+    except Exception:
+        return '<p style="color:#ef4444;font-size:0.84rem">Erro ao processar o questionario. Tenta novamente.</p>'
+
+    letters = ["A","B","C","D","E"]
+    total = len(questions)
+    questions_json = _json.dumps(questions, ensure_ascii=False)
+
+    # Build cards HTML
+    cards = ""
+    for qi, q in enumerate(questions):
+        opts = q.get("options", [])
+        cards += f'<div class="card"><div class="qtxt">{qi+1}. {q.get("question","")}</div><div class="opts">'
+        for oi, opt in enumerate(opts):
+            letter = letters[oi] if oi < len(letters) else str(oi)
+            cards += f'<div class="opt" data-qi="{qi}" data-oi="{oi}"><div class="ltr">{letter}</div><span>{opt}</span></div>'
+        cards += '</div></div>'
+
+    # Full self-contained HTML page inside an iframe srcdoc
+    srcdoc = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:Inter,sans-serif}}
+body{{background:#f7f7f8;padding:12px;color:#111827}}
+.card{{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.07)}}
+.qtxt{{font-size:.9rem;font-weight:600;margin-bottom:12px;line-height:1.5;color:#111827}}
+.opts{{display:flex;flex-direction:column;gap:7px}}
+.opt{{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:7px;border:1.5px solid #e5e7eb;background:#f7f7f8;cursor:pointer;font-size:.84rem;color:#374151;transition:all .15s;user-select:none}}
+.opt:hover{{border-color:#2563eb;background:#eff6ff;color:#2563eb}}
+.opt.correct{{border-color:#16a34a!important;background:#f0fdf4!important;color:#15803d!important;pointer-events:none;font-weight:500}}
+.opt.wrong{{border-color:#ef4444!important;background:#fef2f2!important;color:#dc2626!important;pointer-events:none}}
+.opt.reveal{{border-color:#16a34a!important;background:#f0fdf4!important;color:#15803d!important;pointer-events:none;opacity:.7}}
+.opt.locked{{pointer-events:none;opacity:.6}}
+.ltr{{width:26px;height:26px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;flex-shrink:0;color:#6b7280}}
+.opt.correct .ltr{{background:#16a34a;color:#fff}}
+.opt.wrong .ltr{{background:#ef4444;color:#fff}}
+.opt.reveal .ltr{{background:#16a34a;color:#fff}}
+.score{{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 18px;text-align:center;font-size:.88rem;color:#2563eb;font-weight:600;margin-top:8px;display:none}}
+</style>
+</head>
+<body>
+{cards}
+<div class="score" id="sc"></div>
+<script>
+var D={questions_json};
+var answered=new Array({total}).fill(false);
+var score=0;
+document.addEventListener('click',function(e){{
+  var opt=e.target.closest('.opt');
+  if(!opt)return;
+  var qi=parseInt(opt.dataset.qi),oi=parseInt(opt.dataset.oi);
+  if(answered[qi])return;
+  answered[qi]=true;
+  var q=D[qi],ci=q.correct;
+  var all=document.querySelectorAll('[data-qi="'+qi+'"]');
+  all.forEach(function(el){{el.classList.add('locked')}});
+  if(oi===ci){{opt.classList.remove('locked');opt.classList.add('correct');score++;}}
+  else{{
+    opt.classList.remove('locked');opt.classList.add('wrong');
+    var correct=document.querySelector('[data-qi="'+qi+'"][data-oi="'+ci+'"]');
+    if(correct){{correct.classList.remove('locked');correct.classList.add('reveal');}}
+  }}
+  if(answered.every(Boolean)){{
+    var sc=document.getElementById('sc');
+    var erros={total}-score;
+    var pct=Math.round(score/{total}*100);
+    sc.style.display='block';
+    sc.textContent=score+' certas  ·  '+erros+' erradas  ·  '+pct+'%';
+  }}
+}});
+</script>
+</body>
+</html>"""
+
+    # 260px per question (card + options + spacing) + 120px overhead
+    height = total * 260 + 120
+    return f'<iframe srcdoc="{srcdoc.replace(chr(34), "&quot;")}" style="width:100%;height:{height}px;border:none;border-radius:10px;display:block" scrolling="no"></iframe>'
 
 def reset_db():
     engine.reset_collection()
@@ -314,6 +393,12 @@ footer, .gr-footer { display: none !important; }
     overflow-y: auto !important;
     height: calc(100vh - 49px) !important;
 }
+
+/* Make panel content scrollable */
+.panel {
+    overflow-y: auto !important;
+    max-height: calc(100vh - 49px) !important;
+}
 .panel-title { font-size: 1.1rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .panel-desc  { font-size: 0.82rem; color: var(--muted); margin-bottom: 20px; }
 
@@ -493,98 +578,68 @@ input[type=range] { accent-color: var(--accent) !important; }
 # ── Quiz JS ───────────────────────────────────────────────────────────────────
 
 QUIZ_JS = """
-function renderQuiz(raw) {
-    const area = document.getElementById('quiz-area');
-    if (!area) return;
+// Event delegation - catches clicks on q-opt elements anywhere on the page
+document.addEventListener('click', function(e) {
+    const opt = e.target.closest('.q-opt');
+    if (!opt) return;
+    const qi = parseInt(opt.getAttribute('data-qi'));
+    const oi = parseInt(opt.getAttribute('data-oi'));
+    if (isNaN(qi) || isNaN(oi)) return;
+    pickAnswer(qi, oi);
+});
 
-    if (!raw || raw.trim() === '') {
-        area.innerHTML = '<div class="quiz-error">Nao foi gerado nenhum questionario. Verifica se o topico tem conteudo nos materiais carregados.</div>';
-        return;
+function getQuizData() {
+    const wrap = document.getElementById('quiz-wrap');
+    if (!wrap) return null;
+    const b64 = wrap.getAttribute('data-questions');
+    if (!b64) return null;
+    // Reset state if new quiz loaded (different data)
+    if (window.__quizB64 !== b64) {
+        window.__quizB64 = b64;
+        try {
+            window.__quizData = JSON.parse(atob(b64));
+            window.__quizAnswered = new Array(window.__quizData.length).fill(false);
+            window.__quizScore = 0;
+        } catch(e) { return null; }
     }
-
-    let questions;
-    try {
-        // Clean the string
-        let clean = raw.trim();
-        clean = clean.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const s = clean.indexOf('[');
-        const e = clean.lastIndexOf(']');
-        if (s === -1 || e === -1) throw new Error('No JSON array found');
-        clean = clean.slice(s, e + 1);
-        questions = JSON.parse(clean);
-    } catch(err) {
-        area.innerHTML = '<div class="quiz-error">Erro ao processar o questionario. Tenta gerar novamente.</div>';
-        console.error('Quiz parse error:', err, 'Raw:', raw);
-        return;
-    }
-
-    if (!Array.isArray(questions) || questions.length === 0) {
-        area.innerHTML = '<div class="quiz-error">O questionario ficou vazio. Tenta novamente.</div>';
-        return;
-    }
-
-    const letters = ['A', 'B', 'C', 'D', 'E'];
-    const state = { answered: new Array(questions.length).fill(false), score: 0 };
-
-    let html = '<div class="quiz-wrap">';
-    questions.forEach((q, qi) => {
-        const opts = Array.isArray(q.options) ? q.options : [];
-        html += `<div class="q-card">`;
-        html += `<div class="q-text">${qi + 1}. ${q.question || ''}</div>`;
-        html += `<div class="q-options">`;
-        opts.forEach((opt, oi) => {
-            html += `<div class="q-opt" id="o-${qi}-${oi}" onclick="pickAnswer(${qi},${oi})">
-                <div class="q-letter">${letters[oi] || oi}</div>
-                <span>${opt}</span>
-            </div>`;
-        });
-        html += `</div><div class="q-fb" id="fb-${qi}"></div></div>`;
-    });
-    html += '</div><div class="quiz-score" id="qscore"></div>';
-
-    area.innerHTML = html;
-    window.__quiz = { questions, state };
+    return window.__quizData;
 }
 
 function pickAnswer(qi, oi) {
-    const qd = window.__quiz;
-    if (!qd || qd.state.answered[qi]) return;
-    qd.state.answered[qi] = true;
+    const data = getQuizData();
+    if (!data) return;
+    if (window.__quizAnswered[qi]) return;
+    window.__quizAnswered[qi] = true;
 
-    const q = qd.questions[qi];
+    const q = data[qi];
     const correctIdx = typeof q.correct === 'number' ? q.correct : 0;
-    const fb = document.getElementById('fb-' + qi);
+    const letters = ['A','B','C','D','E'];
 
-    // Lock and style all options
-    const opts = document.querySelectorAll('[id^="o-' + qi + '-"]');
-    opts.forEach((el, i) => {
-        el.classList.add('locked');
+    // Lock all options and highlight correct
+    for (let i = 0; i < q.options.length; i++) {
+        const el = document.getElementById('o-' + qi + '-' + i);
+        if (!el) continue;
+        el.style.pointerEvents = 'none';
         if (i === correctIdx && i !== oi) el.classList.add('reveal');
-    });
+    }
 
     const chosen = document.getElementById('o-' + qi + '-' + oi);
     if (oi === correctIdx) {
         chosen.classList.add('correct');
-        qd.state.score++;
-        if (fb) {
-            fb.className = 'q-fb show ok';
-            fb.textContent = 'Correto! ' + (q.explanation || '');
-        }
+        window.__quizScore = (window.__quizScore || 0) + 1;
     } else {
         chosen.classList.add('wrong');
-        const correctLetter = ['A','B','C','D','E'][correctIdx] || correctIdx;
-        if (fb) {
-            fb.className = 'q-fb show err';
-            fb.textContent = 'Errado. A resposta correta e a opcao ' + correctLetter + '. ' + (q.explanation || '');
-        }
     }
 
-    if (qd.state.answered.every(Boolean)) {
+    // Show score when all answered
+    if (window.__quizAnswered.every(Boolean)) {
         const sc = document.getElementById('qscore');
         if (sc) {
-            const pct = Math.round((qd.state.score / qd.questions.length) * 100);
+            const total = data.length;
+            const erros = total - window.__quizScore;
+            const pct = Math.round((window.__quizScore / total) * 100);
             sc.style.display = 'block';
-            sc.textContent = 'Resultado final: ' + qd.state.score + ' / ' + qd.questions.length + ' (' + pct + '%)';
+            sc.innerHTML = window.__quizScore + ' certas &nbsp;&middot;&nbsp; ' + erros + ' erradas &nbsp;&middot;&nbsp; ' + pct + '%';
         }
     }
 }
@@ -695,8 +750,10 @@ with gr.Blocks(title="uRobot Tutor") as demo:
                             label="Numero de perguntas",
                         )
                         quiz_btn = gr.Button("Gerar Questionario", variant="primary")
-                        quiz_raw = gr.Textbox(visible=False)
-                        gr.HTML('<div id="quiz-area" style="margin-top:8px"></div>')
+                        quiz_output_html = gr.HTML(
+                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Questionario.</div>',
+                            elem_id="quiz-area"
+                        )
 
     # ── Events ────────────────────────────────────────────────────────────────
     upload_btn.click(upload_files, inputs=[file_input], outputs=[docs_html])
@@ -711,11 +768,7 @@ with gr.Blocks(title="uRobot Tutor") as demo:
     quiz_btn.click(
         make_quiz,
         inputs=[quiz_topic, n_questions],
-        outputs=[quiz_raw],
-    ).then(
-        None,
-        inputs=[quiz_raw],
-        js="(raw) => { renderQuiz(raw); }"
+        outputs=[quiz_output_html],
     )
 
 if __name__ == "__main__":
