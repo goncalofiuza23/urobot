@@ -340,16 +340,13 @@ class TutorEngine:
         prompt = QUIZ_PROMPT.format(topic=topic, context=context, n=n)
         try:
             raw = self.llm.invoke(prompt)
-            print('=== QUIZ OUTPUT ===', repr(raw[:400]))
             raw = raw.strip().replace("```json", "").replace("```", "").strip()
             start = raw.find("[")
             end = raw.rfind("]")
             if start != -1 and end != -1:
                 return raw[start:end+1]
-            print('ERRO: nao encontrou [ ] no output do modelo')
             return '[]'
         except Exception as e:
-            print(f'ERRO na geracao: {e}')
             return '[]'
 
     def generate_flashcards(self, topic: str, n: int = 8) -> str:
