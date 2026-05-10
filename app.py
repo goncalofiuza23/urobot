@@ -136,6 +136,249 @@ document.addEventListener('click',function(e){{
     height = total * 260 + 120
     return f'<iframe srcdoc="{srcdoc.replace(chr(34), "&quot;")}" style="width:100%;height:{height}px;border:none;border-radius:10px;display:block" scrolling="no"></iframe>'
 
+def make_flashcards(topic, n):
+    import json as _json
+    if not topic.strip():
+        return '<p style="color:#6b7280;font-size:0.84rem">Escreve um topico para gerar os flashcards.</p>'
+    raw = engine.generate_flashcards(topic, int(n))
+    raw = raw.strip().replace("```json","").replace("```","").strip()
+    start = raw.find("["); end = raw.rfind("]")
+    if start == -1 or end == -1:
+        return '<p style="color:#ef4444;font-size:0.84rem">Nao foi possivel gerar flashcards. Tenta novamente.</p>'
+    raw = raw[start:end+1]
+    if raw == "[]":
+        return '<p style="color:#ef4444;font-size:0.84rem">Nao encontrei informacao suficiente nos materiais.</p>'
+    try:
+        cards = _json.loads(raw)
+    except Exception:
+        return '<p style="color:#ef4444;font-size:0.84rem">Erro ao processar os flashcards. Tenta novamente.</p>'
+
+    total = len(cards)
+    cards_json = _json.dumps(cards, ensure_ascii=False)
+
+    cards_html = ""
+    for i, c in enumerate(cards):
+        front = c.get("front", "")
+        back = c.get("back", "")
+        cards_html += f"""<div class="fc" id="fc{i}">
+  <div class="fc-inner" id="fci{i}">
+    <div class="fc-front"><div class="fc-num">{i+1} / {total}</div><div class="fc-txt">{front}</div><div class="fc-hint">clica para ver a resposta</div></div>
+    <div class="fc-back"><div class="fc-num">{i+1} / {total}</div><div class="fc-txt">{back}</div><div class="fc-hint">clica para virar</div></div>
+  </div>
+</div>"""
+
+    srcdoc = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:Inter,sans-serif}}
+body{{background:#f7f7f8;padding:16px;color:#111827}}
+h3{{font-size:.8rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}}
+.nav{{display:flex;gap:10px;margin-bottom:16px;align-items:center}}
+.nav button{{padding:8px 18px;border-radius:7px;border:1.5px solid #e5e7eb;background:#fff;font-size:.82rem;font-weight:500;cursor:pointer;color:#374151;transition:all .15s}}
+.nav button:hover{{border-color:#2563eb;color:#2563eb;background:#eff6ff}}
+.nav .prog{{flex:1;text-align:center;font-size:.8rem;color:#6b7280}}
+.fc{{display:none;perspective:1000px;height:200px;cursor:pointer}}
+.fc.active{{display:block}}
+.fc-inner{{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s ease}}
+.fc.flipped .fc-inner{{transform:rotateY(180deg)}}
+.fc-front,.fc-back{{position:absolute;width:100%;height:100%;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.08)}}
+.fc-front{{background:#fff;border:1.5px solid #e5e7eb}}
+.fc-back{{background:#2563eb;border:1.5px solid #2563eb;transform:rotateY(180deg)}}
+.fc-num{{font-size:.7rem;color:#9ca3af;margin-bottom:10px;font-weight:500}}
+.fc-back .fc-num{{color:rgba(255,255,255,.6)}}
+.fc-txt{{font-size:1rem;font-weight:600;line-height:1.5;color:#111827}}
+.fc-back .fc-txt{{color:#fff}}
+.fc-hint{{font-size:.72rem;color:#9ca3af;margin-top:12px}}
+.fc-back .fc-hint{{color:rgba(255,255,255,.5)}}
+.dots{{display:flex;justify-content:center;gap:6px;margin-top:14px;flex-wrap:wrap}}
+.dot{{width:8px;height:8px;border-radius:50%;background:#e5e7eb;cursor:pointer;transition:background .2s}}
+.dot.active{{background:#2563eb}}
+.dot.seen{{background:#93c5fd}}
+</style>
+</head>
+<body>
+<h3>Flashcards — {total} cartoes</h3>
+<div class="nav">
+  <button onclick="move(-1)">&#8592; Anterior</button>
+  <div class="prog" id="prog">1 / {total}</div>
+  <button onclick="move(1)">Seguinte &#8594;</button>
+</div>
+{cards_html}
+<div class="dots" id="dots"></div>
+<script>
+var cur=0,total={total},seen=new Array(total).fill(false);
+seen[0]=true;
+function show(i){{
+  document.querySelectorAll('.fc').forEach(function(el){{el.classList.remove('active','flipped')}});
+  var el=document.getElementById('fc'+i);
+  if(el){{el.classList.add('active');}}
+  document.getElementById('prog').textContent=(i+1)+' / '+total;
+  updateDots();
+}}
+function move(d){{
+  cur=Math.max(0,Math.min(total-1,cur+d));
+  seen[cur]=true;
+  show(cur);
+}}
+document.addEventListener('click',function(e){{
+  var fc=e.target.closest('.fc');
+  if(fc){{fc.classList.toggle('flipped');return;}}
+  var dot=e.target.closest('.dot');
+  if(dot){{cur=parseInt(dot.dataset.i);seen[cur]=true;show(cur);}}
+}});
+function updateDots(){{
+  var c=document.getElementById('dots');
+  c.innerHTML='';
+  for(var i=0;i<total;i++){{
+    var d=document.createElement('div');
+    d.className='dot'+(i===cur?' active':seen[i]?' seen':'');
+    d.dataset.i=i;d.title='Cartao '+(i+1);
+    c.appendChild(d);
+  }}
+}}
+show(0);
+</script>
+</body>
+</html>"""
+
+    height = 380
+    return f'<iframe srcdoc="{srcdoc.replace(chr(34), "&quot;")}" style="width:100%;height:{height}px;border:none;border-radius:10px;display:block" scrolling="no"></iframe>'
+
+
+def make_bullets(topic):
+    if not topic.strip():
+        return "Escreve um topico para gerar o resumo."
+    return engine.bullets_summary(topic)
+
+def make_fill(topic, n):
+    import json as _json
+    if not topic.strip():
+        return '<p style="color:#6b7280;font-size:0.84rem">Escreve um topico.</p>'
+    raw = engine.generate_fill(topic, int(n))
+    raw = raw.strip().replace("```json","").replace("```","").strip()
+    s = raw.find("["); e = raw.rfind("]")
+    if s == -1 or e == -1 or raw[s:e+1] == "[]":
+        return '<p style="color:#ef4444;font-size:0.84rem">Nao foi possivel gerar exercicios. Tenta novamente.</p>'
+    try:
+        exercises = _json.loads(raw[s:e+1])
+    except Exception:
+        return '<p style="color:#ef4444;font-size:0.84rem">Erro ao processar. Tenta novamente.</p>'
+
+    total = len(exercises)
+    ex_json = _json.dumps(exercises, ensure_ascii=False)
+
+    ex_html = ""
+    for i, ex in enumerate(exercises):
+        display = ex.get("display") or ex.get("sentence","")
+        ex_html += f'''<div class="ex" id="ex{i}">
+  <div class="ex-num">Exercicio {i+1}</div>
+  <div class="ex-sent">{display}</div>
+  <div class="ex-row">
+    <input class="ex-input" id="inp{i}" placeholder="Escreve a palavra em falta..." autocomplete="off">
+    <button class="ex-btn" onclick="checkFill({i})">Verificar</button>
+  </div>
+  <div class="ex-fb" id="fb{i}"></div>
+</div>'''
+
+    srcdoc = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;font-family:Inter,sans-serif}}
+body{{background:#f7f7f8;padding:14px;color:#111827}}
+.ex{{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}}
+.ex-num{{font-size:.7rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}}
+.ex-sent{{font-size:.92rem;line-height:1.6;color:#111827;margin-bottom:12px;font-weight:500}}
+.ex-row{{display:flex;gap:8px}}
+.ex-input{{flex:1;padding:9px 13px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:.86rem;color:#111827;outline:none;transition:border-color .15s}}
+.ex-input:focus{{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}}
+.ex-input.ok{{border-color:#16a34a;background:#f0fdf4}}
+.ex-input.err{{border-color:#ef4444;background:#fef2f2}}
+.ex-btn{{padding:9px 18px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:.84rem;font-weight:500;cursor:pointer;white-space:nowrap}}
+.ex-btn:hover{{background:#1d4ed8}}
+.ex-fb{{margin-top:10px;font-size:.8rem;padding:8px 12px;border-radius:6px;display:none}}
+.ex-fb.ok{{display:block;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}}
+.ex-fb.err{{display:block;background:#fef2f2;border:1px solid #fecaca;color:#991b1b}}
+.score{{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;text-align:center;font-size:.88rem;color:#2563eb;font-weight:600;margin-top:4px;display:none}}
+</style></head><body>
+{ex_html}
+<div class="score" id="sc"></div>
+<script>
+var D={ex_json};
+var answered=new Array({total}).fill(false);
+var score=0;
+function checkFill(i){{
+  if(answered[i])return;
+  answered[i]=true;
+  var inp=document.getElementById('inp'+i);
+  var fb=document.getElementById('fb'+i);
+  var ans=D[i].answer.trim().toLowerCase();
+  var val=inp.value.trim().toLowerCase();
+  if(val===ans||ans.includes(val)&&val.length>2){{
+    inp.className='ex-input ok';
+    fb.className='ex-fb ok';
+    fb.textContent='Correto! A resposta e: '+D[i].answer;
+    score++;
+  }}else{{
+    inp.className='ex-input err';
+    fb.className='ex-fb err';
+    fb.textContent='Errado. A resposta correta e: '+D[i].answer;
+  }}
+  inp.disabled=true;
+  if(answered.every(Boolean)){{
+    var sc=document.getElementById('sc');
+    var pct=Math.round(score/{total}*100);
+    sc.style.display='block';
+    sc.textContent=score+' certas  ·  '+({total}-score)+' erradas  ·  '+pct+'%';
+  }}
+}}
+document.addEventListener('keydown',function(e){{
+  if(e.key==='Enter'){{
+    var inp=e.target;
+    if(!inp.classList.contains('ex-input'))return;
+    var i=parseInt(inp.id.replace('inp',''));
+    checkFill(i);
+  }}
+}});
+</script>
+</body></html>"""
+
+    height = total * 155 + 80
+    return f'<iframe srcdoc="{srcdoc.replace(chr(34), "&quot;")}" style="width:100%;height:{height}px;border:none;border-radius:10px;display:block" scrolling="no"></iframe>'
+
+def make_compare(topic_a, topic_b):
+    import json as _json
+    if not topic_a.strip() or not topic_b.strip():
+        return '<p style="color:#6b7280;font-size:0.84rem">Escreve os dois topicos para comparar.</p>'
+    raw = engine.generate_compare(topic_a, topic_b)
+    raw = raw.strip().replace("```json","").replace("```","").strip()
+    s = raw.find("["); e = raw.rfind("]")
+    if s == -1 or e == -1 or raw[s:e+1] == "[]":
+        return '<p style="color:#ef4444;font-size:0.84rem">Nao foi possivel gerar a comparacao. Tenta novamente.</p>'
+    try:
+        rows = _json.loads(raw[s:e+1])
+    except Exception:
+        return '<p style="color:#ef4444;font-size:0.84rem">Erro ao processar. Tenta novamente.</p>'
+
+    table = f'''<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:Inter,sans-serif;font-size:.86rem">
+<thead><tr>
+  <th style="background:#f0f2f5;padding:11px 14px;text-align:left;border:1px solid #e5e7eb;color:#6b7280;font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;width:24%">Categoria</th>
+  <th style="background:#eff6ff;padding:11px 14px;text-align:left;border:1px solid #e5e7eb;color:#2563eb;font-weight:600">{topic_a}</th>
+  <th style="background:#f0fdf4;padding:11px 14px;text-align:left;border:1px solid #e5e7eb;color:#16a34a;font-weight:600">{topic_b}</th>
+</tr></thead><tbody>'''
+
+    for i, row in enumerate(rows):
+        bg = "#ffffff" if i % 2 == 0 else "#fafafa"
+        table += f'''<tr style="background:{bg}">
+  <td style="padding:10px 14px;border:1px solid #e5e7eb;font-weight:600;color:#374151">{row.get("category","")}</td>
+  <td style="padding:10px 14px;border:1px solid #e5e7eb;color:#111827;line-height:1.5">{row.get("a","")}</td>
+  <td style="padding:10px 14px;border:1px solid #e5e7eb;color:#111827;line-height:1.5">{row.get("b","")}</td>
+</tr>'''
+
+    table += "</tbody></table></div>"
+    return table
+
 def reset_db():
     engine.reset_collection()
     return build_docs_html()
@@ -733,6 +976,59 @@ with gr.Blocks(title="uRobot Tutor") as demo:
                         summary_btn = gr.Button("Gerar Resumo", variant="primary")
                         summary_output = gr.Markdown(value="", elem_classes=["output-card"])
 
+                # Flashcards
+                with gr.Tab("Flashcards"):
+                    with gr.Column(elem_classes=["panel"]):
+                        gr.HTML("""
+                        <div class="panel-title">Flashcards</div>
+                        <div class="panel-desc">Cartoes de estudo interativos — clica para ver a resposta.</div>
+                        """)
+                        flash_topic = gr.Textbox(
+                            label="Topico",
+                            placeholder="ex: redes neuronais, fotossintese, algoritmos",
+                            lines=1,
+                        )
+                        n_flashcards = gr.Slider(
+                            minimum=4, maximum=20, value=8, step=1,
+                            label="Numero de flashcards",
+                        )
+                        flash_btn = gr.Button("Gerar Flashcards", variant="primary")
+                        flash_output = gr.HTML(
+                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Flashcards.</div>'
+                        )
+
+                # Completar Frases
+                with gr.Tab("Completar Frases"):
+                    with gr.Column(elem_classes=["panel"]):
+                        gr.HTML("""
+                        <div class="panel-title">Exercicios de completar</div>
+                        <div class="panel-desc">Frases retiradas dos materiais com uma palavra em falta — escreve e verifica.</div>
+                        """)
+                        fill_topic = gr.Textbox(
+                            label="Topico",
+                            placeholder="ex: LLMs, osmose, Segunda Guerra Mundial",
+                            lines=1,
+                        )
+                        n_fill = gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Numero de exercicios")
+                        fill_btn = gr.Button("Gerar Exercicios", variant="primary")
+                        fill_output = gr.HTML(
+                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Exercicios.</div>'
+                        )
+
+                # Comparar Conceitos
+                with gr.Tab("Comparar"):
+                    with gr.Column(elem_classes=["panel"]):
+                        gr.HTML("""
+                        <div class="panel-title">Comparacao de conceitos</div>
+                        <div class="panel-desc">Tabela lado a lado com semelhancas e diferencas entre dois topicos.</div>
+                        """)
+                        compare_a = gr.Textbox(label="Topico A", placeholder="ex: redes neuronais", lines=1)
+                        compare_b = gr.Textbox(label="Topico B", placeholder="ex: algoritmos geneticos", lines=1)
+                        compare_btn = gr.Button("Comparar", variant="primary")
+                        compare_output = gr.HTML(
+                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve os dois topicos e clica em Comparar.</div>'
+                        )
+
                 # Questionarios
                 with gr.Tab("Questionarios"):
                     with gr.Column(elem_classes=["panel"]):
@@ -764,6 +1060,9 @@ with gr.Blocks(title="uRobot Tutor") as demo:
     clear_btn.click(clear_chat, outputs=[chatbot, chat_input])
 
     summary_btn.click(make_summary, inputs=[summary_topic], outputs=[summary_output])
+    flash_btn.click(make_flashcards, inputs=[flash_topic, n_flashcards], outputs=[flash_output])
+    fill_btn.click(make_fill, inputs=[fill_topic, n_fill], outputs=[fill_output])
+    compare_btn.click(make_compare, inputs=[compare_a, compare_b], outputs=[compare_output])
 
     quiz_btn.click(
         make_quiz,

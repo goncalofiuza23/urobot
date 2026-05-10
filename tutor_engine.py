@@ -97,6 +97,100 @@ Rules:
 
 Respond with the JSON array only:"""
 
+FLASHCARD_PROMPT = """You are creating study flashcards in European Portuguese about: "{topic}".
+
+Reference materials:
+{context}
+
+CRITICAL: Respond with ONLY a valid JSON array. No text before or after. Start with [ end with ]
+
+[
+  {{
+    "front": "Pergunta ou conceito curto em portugues?",
+    "back": "Resposta clara e concisa em portugues."
+  }}
+]
+
+Rules:
+- Generate exactly {n} flashcards
+- "front" is a short question or concept (max 15 words)
+- "back" is a clear concise answer (max 40 words)
+- Based ONLY on the reference materials
+- All text in European Portuguese
+
+JSON array only:"""
+
+
+BULLETS_PROMPT = """You are a study assistant. Create an ultra-condensed bullet summary in European Portuguese about: "{topic}".
+
+Reference materials:
+{context}
+
+Rules:
+- Maximum 15 bullet points
+- Each bullet: one short sentence, max 15 words
+- Only the most essential facts
+- No explanations, no examples, just key points
+- Start each bullet with •
+- In European Portuguese
+
+Output only the bullet points, nothing else:"""
+
+FILL_PROMPT = """Create {n} fill-in-the-blank exercises in European Portuguese based ONLY on these materials:
+
+{context}
+
+Instructions:
+1. Pick {n} real sentences from the materials above
+2. In each sentence, remove ONE important technical word and replace it with _____
+3. The removed word must be a key concept (noun or verb), NOT articles or prepositions
+
+CRITICAL: Respond with ONLY a valid JSON array. No text before or after. Start with [ end with ]
+
+Example of correct output:
+[
+  {{
+    "display": "Os LLMs sao treinados com grandes quantidades de _____.",
+    "answer": "dados"
+  }},
+  {{
+    "display": "A _____ e o processo de ajustar um modelo pre-treinado para uma tarefa especifica.",
+    "answer": "fine-tuning"
+  }}
+]
+
+The "display" must be a REAL sentence from the materials with ONE word replaced by _____.
+The "answer" must be the exact word that was removed.
+Generate exactly {n} exercises.
+JSON array only:"""
+
+COMPARE_PROMPT = """You are creating a comparison table in European Portuguese about two topics.
+
+Topic A: "{topic_a}"
+Topic B: "{topic_b}"
+
+Reference materials:
+{context}
+
+CRITICAL: Respond with ONLY a valid JSON array. Start with [ end with ]
+
+[
+  {{
+    "category": "Categoria de comparacao",
+    "a": "Caracteristica do topico A",
+    "b": "Caracteristica do topico B"
+  }}
+]
+
+Rules:
+- Generate exactly 6 comparison rows
+- Categories examples: Definicao, Objetivo, Funcionamento, Vantagens, Desvantagens, Aplicacoes
+- Keep each cell concise (max 20 words)
+- All text in European Portuguese
+- Base on the reference materials
+
+JSON array only:"""
+
 CHAT_PROMPT = """Es um tutor academico. Responde em portugues de Portugal de forma clara e direta.
 
 REGRA IMPORTANTE: Usa APENAS o conteudo educativo dos materiais abaixo para responder.
@@ -256,6 +350,70 @@ class TutorEngine:
             return '[]'
         except Exception as e:
             print(f'ERRO na geracao: {e}')
+            return '[]'
+
+    def generate_flashcards(self, topic: str, n: int = 8) -> str:
+        if not self._has_docs():
+            return '[]'
+        context = self._get_context(topic, k=8)
+        if not context:
+            return '[]'
+        prompt = FLASHCARD_PROMPT.format(topic=topic, context=context, n=n)
+        try:
+            raw = self.llm.invoke(prompt)
+            raw = raw.strip().replace("```json", "").replace("```", "").strip()
+            start = raw.find("[")
+            end = raw.rfind("]")
+            if start != -1 and end != -1:
+                return raw[start:end+1]
+            return '[]'
+        except Exception:
+            return '[]'
+
+    def bullets_summary(self, topic: str) -> str:
+        if not self._has_docs():
+            return "Nao ha materiais carregados."
+        context = self._get_context(topic, k=8)
+        if not context or not self._is_relevant(topic, context):
+            return "Nao encontrei informacao sobre este topico nos materiais."
+        prompt = BULLETS_PROMPT.format(topic=topic, context=context)
+        try:
+            return self.llm.invoke(prompt)
+        except Exception as e:
+            return f"Erro: {e}"
+
+    def generate_fill(self, topic: str, n: int = 5) -> str:
+        if not self._has_docs():
+            return '[]'
+        context = self._get_context(topic, k=8)
+        if not context:
+            return '[]'
+        prompt = FILL_PROMPT.format(topic=topic, context=context, n=n)
+        try:
+            raw = self.llm.invoke(prompt)
+            raw = raw.strip().replace("```json","").replace("```","").strip()
+            s = raw.find("["); e = raw.rfind("]")
+            if s != -1 and e != -1:
+                return raw[s:e+1]
+            return '[]'
+        except Exception:
+            return '[]'
+
+    def generate_compare(self, topic_a: str, topic_b: str) -> str:
+        if not self._has_docs():
+            return '[]'
+        context = self._get_context(topic_a + " " + topic_b, k=10)
+        if not context:
+            return '[]'
+        prompt = COMPARE_PROMPT.format(topic_a=topic_a, topic_b=topic_b, context=context)
+        try:
+            raw = self.llm.invoke(prompt)
+            raw = raw.strip().replace("```json","").replace("```","").strip()
+            s = raw.find("["); e = raw.rfind("]")
+            if s != -1 and e != -1:
+                return raw[s:e+1]
+            return '[]'
+        except Exception:
             return '[]'
 
     def reset_collection(self) -> str:
