@@ -1,8 +1,9 @@
 """
 tutor_engine.py
-Motor principal do uRobot Tutor.
+Motor principal do Document Helper.
 """
 
+import os
 from pathlib import Path
 from langchain_ollama import OllamaLLM, OllamaEmbeddings
 from langchain_chroma import Chroma
@@ -12,6 +13,7 @@ from langchain_core.prompts import PromptTemplate
 
 MODEL_NAME    = "llama3"
 EMBED_MODEL   = "nomic-embed-text"
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 CHROMA_DIR    = "./chroma_db"
 CHUNK_SIZE    = 800
 CHUNK_OVERLAP = 100
@@ -211,8 +213,8 @@ Resposta do tutor:"""
 class TutorEngine:
     def __init__(self):
         print("A inicializar TutorEngine...")
-        self.llm = OllamaLLM(model=MODEL_NAME, temperature=0.2)
-        self.embeddings = OllamaEmbeddings(model=EMBED_MODEL)
+        self.llm = OllamaLLM(model=MODEL_NAME, base_url=OLLAMA_BASE_URL, temperature=0.2)
+        self.embeddings = OllamaEmbeddings(model=EMBED_MODEL, base_url=OLLAMA_BASE_URL)
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
             chunk_overlap=CHUNK_OVERLAP,

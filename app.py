@@ -23,7 +23,7 @@ def build_docs_html():
     for f in info["files"]:
         ext = f.split(".")[-1].upper() if "." in f else "DOC"
         items += f'<div class="doc-item"><span class="doc-icon">{ext}</span><span class="doc-name">{f}</span></div>'
-    return f'<div class="doc-list">{items}<div class="doc-count">{info["total_docs"]} fragmentos indexados</div></div>'
+    return f'<div class="doc-list">{items}<div class="doc-count">{len(info["files"])} documento{"s" if len(info["files"]) != 1 else ""} carregado{"s" if len(info["files"]) != 1 else ""}</div></div>'
 
 def chat_send(message, history):
     if not message.strip():
@@ -45,7 +45,7 @@ def make_summary(topic):
 def make_quiz(topic, n):
     import json as _json
     if not topic.strip():
-        return '<p style="color:#6b7280;font-size:0.84rem">Escreve um topico para gerar o questionario.</p>'
+        return '<p style="color:#64748b;font-size:0.84rem">Escreve um topico para gerar o questionario.</p>'
     raw = engine.generate_quiz(topic, int(n))
     raw = raw.strip().replace("```json", "").replace("```", "").strip()
     start = raw.find("[")
@@ -64,7 +64,6 @@ def make_quiz(topic, n):
     total = len(questions)
     questions_json = _json.dumps(questions, ensure_ascii=False)
 
-    # Build cards HTML
     cards = ""
     for qi, q in enumerate(questions):
         opts = q.get("options", [])
@@ -74,28 +73,27 @@ def make_quiz(topic, n):
             cards += f'<div class="opt" data-qi="{qi}" data-oi="{oi}"><div class="ltr">{letter}</div><span>{opt}</span></div>'
         cards += '</div></div>'
 
-    # Full self-contained HTML page inside an iframe srcdoc
     srcdoc = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;font-family:Inter,sans-serif}}
-body{{background:#f7f7f8;padding:12px;color:#111827}}
-.card{{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.07)}}
-.qtxt{{font-size:.9rem;font-weight:600;margin-bottom:12px;line-height:1.5;color:#111827}}
+body{{background:#f8fafc;padding:12px;color:#0f172a}}
+.card{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:16px;box-shadow:0 4px 6px -1px rgb(0 0 0 / .05)}}
+.qtxt{{font-size:.9rem;font-weight:600;margin-bottom:12px;line-height:1.5;color:#0f172a}}
 .opts{{display:flex;flex-direction:column;gap:7px}}
-.opt{{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:7px;border:1.5px solid #e5e7eb;background:#f7f7f8;cursor:pointer;font-size:.84rem;color:#374151;transition:all .15s;user-select:none}}
-.opt:hover{{border-color:#2563eb;background:#eff6ff;color:#2563eb}}
-.opt.correct{{border-color:#16a34a!important;background:#f0fdf4!important;color:#15803d!important;pointer-events:none;font-weight:500}}
-.opt.wrong{{border-color:#ef4444!important;background:#fef2f2!important;color:#dc2626!important;pointer-events:none}}
-.opt.reveal{{border-color:#16a34a!important;background:#f0fdf4!important;color:#15803d!important;pointer-events:none;opacity:.7}}
+.opt{{display:flex;align-items:center;gap:10px;padding:10px 13px;border-radius:8px;border:1.5px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-size:.84rem;color:#334155;transition:all .15s;user-select:none}}
+.opt:hover{{border-color:#6366f1;background:#e0e7ff;color:#6366f1}}
+.opt.correct{{border-color:#10b981!important;background:#d1fae5!important;color:#047857!important;pointer-events:none;font-weight:500}}
+.opt.wrong{{border-color:#ef4444!important;background:#fee2e2!important;color:#b91c1c!important;pointer-events:none}}
+.opt.reveal{{border-color:#10b981!important;background:#d1fae5!important;color:#047857!important;pointer-events:none;opacity:.7}}
 .opt.locked{{pointer-events:none;opacity:.6}}
-.ltr{{width:26px;height:26px;border-radius:50%;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;flex-shrink:0;color:#6b7280}}
-.opt.correct .ltr{{background:#16a34a;color:#fff}}
+.ltr{{width:26px;height:26px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;flex-shrink:0;color:#64748b}}
+.opt.correct .ltr{{background:#10b981;color:#fff}}
 .opt.wrong .ltr{{background:#ef4444;color:#fff}}
-.opt.reveal .ltr{{background:#16a34a;color:#fff}}
-.score{{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 18px;text-align:center;font-size:.88rem;color:#2563eb;font-weight:600;margin-top:8px;display:none}}
+.opt.reveal .ltr{{background:#10b981;color:#fff}}
+.score{{background:#e0e7ff;border:1px solid #c7d2fe;border-radius:12px;padding:14px 18px;text-align:center;font-size:.88rem;color:#6366f1;font-weight:600;margin-top:8px;display:none}}
 </style>
 </head>
 <body>
@@ -132,14 +130,13 @@ document.addEventListener('click',function(e){{
 </body>
 </html>"""
 
-    # 260px per question (card + options + spacing) + 120px overhead
     height = total * 260 + 120
     return f'<iframe srcdoc="{srcdoc.replace(chr(34), "&quot;")}" style="width:100%;height:{height}px;border:none;border-radius:10px;display:block" scrolling="no"></iframe>'
 
 def make_flashcards(topic, n):
     import json as _json
     if not topic.strip():
-        return '<p style="color:#6b7280;font-size:0.84rem">Escreve um topico para gerar os flashcards.</p>'
+        return '<p style="color:#64748b;font-size:0.84rem">Escreve um topico para gerar os flashcards.</p>'
     raw = engine.generate_flashcards(topic, int(n))
     raw = raw.strip().replace("```json","").replace("```","").strip()
     start = raw.find("["); end = raw.rfind("]")
@@ -173,29 +170,29 @@ def make_flashcards(topic, n):
 <meta charset="utf-8">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;font-family:Inter,sans-serif}}
-body{{background:#f7f7f8;padding:16px;color:#111827}}
-h3{{font-size:.8rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}}
+body{{background:#f8fafc;padding:16px;color:#0f172a}}
+h3{{font-size:.8rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}}
 .nav{{display:flex;gap:10px;margin-bottom:16px;align-items:center}}
-.nav button{{padding:8px 18px;border-radius:7px;border:1.5px solid #e5e7eb;background:#fff;font-size:.82rem;font-weight:500;cursor:pointer;color:#374151;transition:all .15s}}
-.nav button:hover{{border-color:#2563eb;color:#2563eb;background:#eff6ff}}
-.nav .prog{{flex:1;text-align:center;font-size:.8rem;color:#6b7280}}
+.nav button{{padding:8px 18px;border-radius:8px;border:1.5px solid #e2e8f0;background:#fff;font-size:.82rem;font-weight:500;cursor:pointer;color:#334155;transition:all .15s}}
+.nav button:hover{{border-color:#6366f1;color:#6366f1;background:#e0e7ff}}
+.nav .prog{{flex:1;text-align:center;font-size:.8rem;color:#64748b}}
 .fc{{display:none;perspective:1000px;height:200px;cursor:pointer}}
 .fc.active{{display:block}}
 .fc-inner{{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s ease}}
 .fc.flipped .fc-inner{{transform:rotateY(180deg)}}
-.fc-front,.fc-back{{position:absolute;width:100%;height:100%;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.08)}}
-.fc-front{{background:#fff;border:1.5px solid #e5e7eb}}
-.fc-back{{background:#2563eb;border:1.5px solid #2563eb;transform:rotateY(180deg)}}
-.fc-num{{font-size:.7rem;color:#9ca3af;margin-bottom:10px;font-weight:500}}
-.fc-back .fc-num{{color:rgba(255,255,255,.6)}}
-.fc-txt{{font-size:1rem;font-weight:600;line-height:1.5;color:#111827}}
+.fc-front,.fc-back{{position:absolute;width:100%;height:100%;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;box-shadow:0 4px 6px -1px rgb(0 0 0 / .05)}}
+.fc-front{{background:#fff;border:1.5px solid #e2e8f0}}
+.fc-back{{background:#6366f1;border:1.5px solid #6366f1;transform:rotateY(180deg)}}
+.fc-num{{font-size:.7rem;color:#94a3b8;margin-bottom:10px;font-weight:500}}
+.fc-back .fc-num{{color:rgba(255,255,255,.7)}}
+.fc-txt{{font-size:1rem;font-weight:600;line-height:1.5;color:#0f172a}}
 .fc-back .fc-txt{{color:#fff}}
-.fc-hint{{font-size:.72rem;color:#9ca3af;margin-top:12px}}
-.fc-back .fc-hint{{color:rgba(255,255,255,.5)}}
+.fc-hint{{font-size:.72rem;color:#94a3b8;margin-top:12px}}
+.fc-back .fc-hint{{color:rgba(255,255,255,.6)}}
 .dots{{display:flex;justify-content:center;gap:6px;margin-top:14px;flex-wrap:wrap}}
-.dot{{width:8px;height:8px;border-radius:50%;background:#e5e7eb;cursor:pointer;transition:background .2s}}
-.dot.active{{background:#2563eb}}
-.dot.seen{{background:#93c5fd}}
+.dot{{width:8px;height:8px;border-radius:50%;background:#e2e8f0;cursor:pointer;transition:background .2s}}
+.dot.active{{background:#6366f1}}
+.dot.seen{{background:#a5b4fc}}
 </style>
 </head>
 <body>
@@ -246,7 +243,6 @@ show(0);
     height = 380
     return f'<iframe srcdoc="{srcdoc.replace(chr(34), "&quot;")}" style="width:100%;height:{height}px;border:none;border-radius:10px;display:block" scrolling="no"></iframe>'
 
-
 def make_bullets(topic):
     if not topic.strip():
         return "Escreve um topico para gerar o resumo."
@@ -255,7 +251,7 @@ def make_bullets(topic):
 def make_fill(topic, n):
     import json as _json
     if not topic.strip():
-        return '<p style="color:#6b7280;font-size:0.84rem">Escreve um topico.</p>'
+        return '<p style="color:#64748b;font-size:0.84rem">Escreve um topico.</p>'
     raw = engine.generate_fill(topic, int(n))
     raw = raw.strip().replace("```json","").replace("```","").strip()
     s = raw.find("["); e = raw.rfind("]")
@@ -286,21 +282,21 @@ def make_fill(topic, n):
 <html><head><meta charset="utf-8">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;font-family:Inter,sans-serif}}
-body{{background:#f7f7f8;padding:14px;color:#111827}}
-.ex{{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}}
-.ex-num{{font-size:.7rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}}
-.ex-sent{{font-size:.92rem;line-height:1.6;color:#111827;margin-bottom:12px;font-weight:500}}
+body{{background:#f8fafc;padding:14px;color:#0f172a}}
+.ex{{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:14px;box-shadow:0 4px 6px -1px rgb(0 0 0 / .05)}}
+.ex-num{{font-size:.7rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}}
+.ex-sent{{font-size:.92rem;line-height:1.6;color:#0f172a;margin-bottom:12px;font-weight:500}}
 .ex-row{{display:flex;gap:8px}}
-.ex-input{{flex:1;padding:9px 13px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:.86rem;color:#111827;outline:none;transition:border-color .15s}}
-.ex-input:focus{{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.1)}}
-.ex-input.ok{{border-color:#16a34a;background:#f0fdf4}}
-.ex-input.err{{border-color:#ef4444;background:#fef2f2}}
-.ex-btn{{padding:9px 18px;background:#2563eb;color:#fff;border:none;border-radius:7px;font-size:.84rem;font-weight:500;cursor:pointer;white-space:nowrap}}
-.ex-btn:hover{{background:#1d4ed8}}
+.ex-input{{flex:1;padding:9px 13px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:.86rem;color:#0f172a;outline:none;transition:border-color .15s}}
+.ex-input:focus{{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.1)}}
+.ex-input.ok{{border-color:#10b981;background:#d1fae5}}
+.ex-input.err{{border-color:#ef4444;background:#fee2e2}}
+.ex-btn{{padding:9px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:.84rem;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s}}
+.ex-btn:hover{{background:#4f46e5}}
 .ex-fb{{margin-top:10px;font-size:.8rem;padding:8px 12px;border-radius:6px;display:none}}
-.ex-fb.ok{{display:block;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}}
-.ex-fb.err{{display:block;background:#fef2f2;border:1px solid #fecaca;color:#991b1b}}
-.score{{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px;text-align:center;font-size:.88rem;color:#2563eb;font-weight:600;margin-top:4px;display:none}}
+.ex-fb.ok{{display:block;background:#d1fae5;border:1px solid #a7f3d0;color:#047857}}
+.ex-fb.err{{display:block;background:#fee2e2;border:1px solid #fecaca;color:#b91c1c}}
+.score{{background:#e0e7ff;border:1px solid #c7d2fe;border-radius:12px;padding:14px;text-align:center;font-size:.88rem;color:#6366f1;font-weight:600;margin-top:4px;display:none}}
 </style></head><body>
 {ex_html}
 <div class="score" id="sc"></div>
@@ -350,7 +346,7 @@ document.addEventListener('keydown',function(e){{
 def make_compare(topic_a, topic_b):
     import json as _json
     if not topic_a.strip() or not topic_b.strip():
-        return '<p style="color:#6b7280;font-size:0.84rem">Escreve os dois topicos para comparar.</p>'
+        return '<p style="color:#64748b;font-size:0.84rem">Escreve os dois topicos para comparar.</p>'
     raw = engine.generate_compare(topic_a, topic_b)
     raw = raw.strip().replace("```json","").replace("```","").strip()
     s = raw.find("["); e = raw.rfind("]")
@@ -363,17 +359,17 @@ def make_compare(topic_a, topic_b):
 
     table = f'''<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:Inter,sans-serif;font-size:.86rem">
 <thead><tr>
-  <th style="background:#f0f2f5;padding:11px 14px;text-align:left;border:1px solid #e5e7eb;color:#6b7280;font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;width:24%">Categoria</th>
-  <th style="background:#eff6ff;padding:11px 14px;text-align:left;border:1px solid #e5e7eb;color:#2563eb;font-weight:600">{topic_a}</th>
-  <th style="background:#f0fdf4;padding:11px 14px;text-align:left;border:1px solid #e5e7eb;color:#16a34a;font-weight:600">{topic_b}</th>
+  <th style="background:#f1f5f9;padding:11px 14px;text-align:left;border:1px solid #e2e8f0;color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;width:24%">Categoria</th>
+  <th style="background:#e0e7ff;padding:11px 14px;text-align:left;border:1px solid #e2e8f0;color:#6366f1;font-weight:600">{topic_a}</th>
+  <th style="background:#d1fae5;padding:11px 14px;text-align:left;border:1px solid #e2e8f0;color:#10b981;font-weight:600">{topic_b}</th>
 </tr></thead><tbody>'''
 
     for i, row in enumerate(rows):
-        bg = "#ffffff" if i % 2 == 0 else "#fafafa"
+        bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
         table += f'''<tr style="background:{bg}">
-  <td style="padding:10px 14px;border:1px solid #e5e7eb;font-weight:600;color:#374151">{row.get("category","")}</td>
-  <td style="padding:10px 14px;border:1px solid #e5e7eb;color:#111827;line-height:1.5">{row.get("a","")}</td>
-  <td style="padding:10px 14px;border:1px solid #e5e7eb;color:#111827;line-height:1.5">{row.get("b","")}</td>
+  <td style="padding:10px 14px;border:1px solid #e2e8f0;font-weight:600;color:#334155">{row.get("category","")}</td>
+  <td style="padding:10px 14px;border:1px solid #e2e8f0;color:#0f172a;line-height:1.5">{row.get("a","")}</td>
+  <td style="padding:10px 14px;border:1px solid #e2e8f0;color:#0f172a;line-height:1.5">{row.get("b","")}</td>
 </tr>'''
 
     table += "</tbody></table></div>"
@@ -382,441 +378,6 @@ def make_compare(topic_a, topic_b):
 def reset_db():
     engine.reset_collection()
     return build_docs_html()
-
-# ── CSS ───────────────────────────────────────────────────────────────────────
-
-CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-    --bg:         #f7f7f8;
-    --sidebar-bg: #ffffff;
-    --surface:    #ffffff;
-    --surface2:   #f0f2f5;
-    --border:     #e5e7eb;
-    --accent:     #2563eb;
-    --accent-h:   #1d4ed8;
-    --accent-soft:#eff6ff;
-    --text:       #111827;
-    --text-soft:  #374151;
-    --muted:      #6b7280;
-    --muted2:     #d1d5db;
-    --danger:     #ef4444;
-    --success:    #16a34a;
-    --r:          10px;
-    --r-sm:       7px;
-    --shadow:     0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
-}
-
-body, .gradio-container, .gradio-container > div {
-    background: var(--bg) !important;
-    font-family: 'Inter', sans-serif !important;
-    color: var(--text) !important;
-}
-
-footer, .gr-footer { display: none !important; }
-.gradio-container { padding: 0 !important; max-width: 100% !important; overflow: hidden; }
-
-/* Scroll fixes */
-.panel { overflow-y: auto !important; }
-.chat-col { overflow-y: hidden !important; }
-.chatbot-wrap, .chat-col > div:first-child { flex: 1 !important; overflow-y: auto !important; }
-
-/* Layout */
-.app-layout {
-    display: flex !important;
-    height: 100vh !important;
-    overflow: hidden !important;
-    gap: 0 !important;
-}
-
-/* Sidebar */
-.sidebar {
-    width: 250px !important;
-    min-width: 250px !important;
-    max-width: 250px !important;
-    background: var(--sidebar-bg) !important;
-    border-right: 1px solid var(--border) !important;
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100vh !important;
-    overflow: hidden !important;
-}
-
-.sb-header {
-    padding: 20px 16px 14px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-}
-.sb-title { font-size: 0.92rem; font-weight: 600; color: var(--text); }
-.sb-sub { font-size: 0.67rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 3px; }
-
-.sb-section {
-    padding: 14px 14px 6px;
-    flex-shrink: 0;
-}
-.sb-label {
-    font-size: 0.62rem;
-    font-weight: 600;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 8px;
-}
-
-.docs-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 8px;
-}
-
-.doc-list { padding: 2px 0; }
-.doc-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 8px;
-    border-radius: var(--r-sm);
-    margin-bottom: 2px;
-}
-.doc-icon {
-    font-size: 0.55rem;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
-    background: var(--accent);
-    color: white;
-    padding: 2px 5px;
-    border-radius: 3px;
-    flex-shrink: 0;
-    letter-spacing: 0.05em;
-}
-.doc-name {
-    font-size: 0.78rem;
-    color: var(--text-soft);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.doc-count {
-    font-size: 0.67rem;
-    color: var(--muted);
-    font-family: 'JetBrains Mono', monospace;
-    padding: 6px 8px 4px;
-}
-.empty-docs {
-    font-size: 0.78rem;
-    color: var(--muted);
-    padding: 6px 8px;
-    line-height: 1.6;
-}
-
-.sb-footer {
-    flex-shrink: 0;
-    border-top: 1px solid var(--border);
-    padding: 12px;
-}
-
-.upload-compact .wrap {
-    border: 1.5px dashed var(--muted2) !important;
-    border-radius: var(--r-sm) !important;
-    background: transparent !important;
-    min-height: 56px !important;
-    transition: border-color 0.2s !important;
-}
-.upload-compact .wrap:hover { border-color: var(--accent) !important; }
-.upload-compact span { font-size: 0.75rem !important; color: var(--muted) !important; }
-
-/* Main */
-.main-col {
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    height: 100vh !important;
-    overflow: hidden !important;
-    min-width: 0 !important;
-}
-
-/* Tabs */
-.tab-wrap > div:first-child {
-    background: var(--surface) !important;
-    border-bottom: 1px solid var(--border) !important;
-    padding: 0 20px !important;
-    box-shadow: var(--shadow) !important;
-}
-.tab-wrap button {
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    color: var(--muted) !important;
-    padding: 13px 14px !important;
-    border-bottom: 2px solid transparent !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    transition: color 0.15s !important;
-}
-.tab-wrap button:hover { color: var(--text) !important; }
-.tab-wrap button.selected { color: var(--accent) !important; border-bottom-color: var(--accent) !important; }
-
-/* Chat */
-.chat-col {
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-}
-
-.message.user .message-bubble-border {
-    background: var(--accent) !important;
-    border-radius: 18px 18px 4px 18px !important;
-    padding: 11px 15px !important;
-    border: none !important;
-}
-.message.user .message-bubble-border p,
-.message.user .message-bubble-border span { color: #fff !important; }
-
-.message.bot .message-bubble-border {
-    background: var(--surface) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 18px 18px 18px 4px !important;
-    padding: 11px 15px !important;
-    box-shadow: var(--shadow) !important;
-}
-.message.bot .message-bubble-border p,
-.message.bot .message-bubble-border span,
-.message.bot .message-bubble-border li { color: var(--text) !important; }
-
-.message-bubble-border p,
-.message-bubble-border li,
-.message-bubble-border span {
-    font-size: 0.88rem !important;
-    line-height: 1.75 !important;
-    font-family: 'Inter', sans-serif !important;
-}
-.message-bubble-border strong { color: var(--accent) !important; font-weight: 600 !important; }
-
-.chat-bar {
-    flex-shrink: 0 !important;
-    padding: 12px 20px 16px !important;
-    background: var(--surface) !important;
-    border-top: 1px solid var(--border) !important;
-}
-.chat-bar textarea {
-    background: var(--bg) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 10px !important;
-    color: var(--text) !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.88rem !important;
-    padding: 11px 15px !important;
-    resize: none !important;
-    box-shadow: var(--shadow) !important;
-    transition: border-color 0.2s !important;
-}
-.chat-bar textarea:focus {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
-    outline: none !important;
-}
-.chat-bar textarea::placeholder { color: var(--muted) !important; }
-
-/* Panel */
-.panel {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    padding: 28px 32px 60px !important;
-    max-width: 700px !important;
-    margin: 0 auto !important;
-    width: 100% !important;
-}
-
-/* Wrapper that actually scrolls */
-.tab-wrap > div:last-child > div {
-    overflow-y: auto !important;
-    height: calc(100vh - 49px) !important;
-}
-
-/* Make panel content scrollable */
-.panel {
-    overflow-y: auto !important;
-    max-height: calc(100vh - 49px) !important;
-}
-.panel-title { font-size: 1.1rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-.panel-desc  { font-size: 0.82rem; color: var(--muted); margin-bottom: 20px; }
-
-label > span {
-    font-size: 0.7rem !important;
-    font-weight: 600 !important;
-    color: var(--muted) !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.08em !important;
-    margin-bottom: 5px !important;
-    display: block !important;
-}
-
-.panel input[type=text], .panel textarea {
-    background: var(--surface) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--r-sm) !important;
-    color: var(--text) !important;
-    font-family: 'Inter', sans-serif !important;
-    font-size: 0.88rem !important;
-    padding: 10px 13px !important;
-    box-shadow: var(--shadow) !important;
-    transition: border-color 0.2s !important;
-}
-.panel input[type=text]:focus, .panel textarea:focus {
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.1) !important;
-    outline: none !important;
-}
-
-/* Buttons */
-button {
-    font-family: 'Inter', sans-serif !important;
-    font-weight: 500 !important;
-    border-radius: var(--r-sm) !important;
-    transition: all 0.15s !important;
-    cursor: pointer !important;
-}
-.gr-button-primary, button.primary {
-    background: var(--accent) !important;
-    color: #fff !important;
-    border: none !important;
-    font-size: 0.85rem !important;
-    padding: 10px 20px !important;
-}
-.gr-button-primary:hover, button.primary:hover {
-    background: var(--accent-h) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(37,99,235,0.3) !important;
-}
-.gr-button-secondary, button.secondary {
-    background: var(--surface) !important;
-    color: var(--muted) !important;
-    border: 1px solid var(--border) !important;
-    font-size: 0.82rem !important;
-    padding: 9px 14px !important;
-    box-shadow: var(--shadow) !important;
-}
-.gr-button-secondary:hover, button.secondary:hover {
-    color: var(--danger) !important;
-    border-color: var(--danger) !important;
-    background: #fef2f2 !important;
-}
-
-/* Output card */
-.output-card {
-    background: var(--surface) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--r) !important;
-    padding: 20px 22px !important;
-    margin-top: 14px !important;
-    min-height: 80px !important;
-    box-shadow: var(--shadow) !important;
-}
-
-/* The panel itself scrolls - remove fixed height from output-card */
-.tab-content-scroll {
-    flex: 1 !important;
-    overflow-y: auto !important;
-    height: calc(100vh - 49px) !important;
-}
-.output-card p, .output-card li, .output-card span { color: var(--text) !important; font-size: 0.88rem !important; line-height: 1.8 !important; }
-.output-card strong { color: var(--accent) !important; font-weight: 600 !important; }
-.output-card h1, .output-card h2, .output-card h3 { color: var(--text) !important; font-weight: 600 !important; margin: 0.8em 0 0.3em !important; }
-.output-card ul, .output-card ol { padding-left: 1.4em !important; color: var(--text) !important; }
-.output-card hr { border-color: var(--border) !important; margin: 14px 0 !important; }
-
-/* Slider */
-input[type=range] { accent-color: var(--accent) !important; }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--muted2); border-radius: 99px; }
-
-/* Quiz styles (injected via HTML) */
-#quiz-area .quiz-wrap { display: flex; flex-direction: column; gap: 18px; margin-top: 4px; }
-#quiz-area .q-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 18px 20px;
-    box-shadow: var(--shadow);
-}
-#quiz-area .q-text { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 12px; line-height: 1.5; }
-#quiz-area .q-options { display: flex; flex-direction: column; gap: 7px; }
-#quiz-area .q-opt {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 13px;
-    border-radius: var(--r-sm);
-    border: 1.5px solid var(--border);
-    background: var(--bg);
-    cursor: pointer;
-    font-size: 0.84rem;
-    color: var(--text-soft);
-    transition: border-color 0.15s, background 0.15s, color 0.15s;
-    user-select: none;
-}
-#quiz-area .q-opt:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-#quiz-area .q-opt.correct { border-color: #16a34a !important; background: #f0fdf4 !important; color: #15803d !important; font-weight: 500; pointer-events: none; }
-#quiz-area .q-opt.wrong   { border-color: #ef4444 !important; background: #fef2f2 !important; color: #dc2626 !important; pointer-events: none; }
-#quiz-area .q-opt.reveal  { border-color: #16a34a !important; background: #f0fdf4 !important; color: #15803d !important; pointer-events: none; opacity: 0.7; }
-#quiz-area .q-opt.locked  { pointer-events: none; opacity: 0.6; }
-#quiz-area .q-letter {
-    width: 26px; height: 26px;
-    border-radius: 50%;
-    background: #f3f4f6;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.72rem; font-weight: 700;
-    flex-shrink: 0; color: var(--muted);
-    transition: background 0.15s, color 0.15s;
-}
-#quiz-area .q-opt.correct .q-letter { background: #16a34a; color: white; }
-#quiz-area .q-opt.wrong   .q-letter { background: #ef4444; color: white; }
-#quiz-area .q-opt.reveal  .q-letter { background: #16a34a; color: white; }
-#quiz-area .q-fb {
-    margin-top: 10px;
-    padding: 10px 14px;
-    border-radius: var(--r-sm);
-    font-size: 0.8rem;
-    line-height: 1.6;
-    display: none;
-}
-#quiz-area .q-fb.show { display: block; }
-#quiz-area .q-fb.ok  { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
-#quiz-area .q-fb.err { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-#quiz-area .quiz-score {
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: var(--r);
-    padding: 16px 20px;
-    text-align: center;
-    font-size: 0.88rem;
-    color: var(--accent);
-    font-weight: 600;
-    margin-top: 8px;
-    display: none;
-}
-#quiz-area .quiz-loading {
-    color: var(--muted);
-    font-size: 0.85rem;
-    padding: 20px 0;
-    text-align: center;
-}
-#quiz-area .quiz-error {
-    color: var(--danger);
-    font-size: 0.82rem;
-    padding: 14px;
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: var(--r-sm);
-}
-"""
 
 # ── Quiz JS ───────────────────────────────────────────────────────────────────
 
@@ -890,7 +451,7 @@ function pickAnswer(qi, oi) {
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
-with gr.Blocks(title="uRobot Tutor") as demo:
+with gr.Blocks(title="Document Helper") as demo:
 
     gr.HTML(f"<script>{QUIZ_JS}</script>")
 
@@ -901,8 +462,17 @@ with gr.Blocks(title="uRobot Tutor") as demo:
 
             gr.HTML("""
             <div class="sb-header">
-                <div class="sb-title">uRobot Tutor</div>
-                <div class="sb-sub">local · privado · sem internet</div>
+                <div class="logo-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    <div class="logo-text">
+                        <span class="logo-main">Document Helper</span>
+                    </div>
+                </div>
             </div>
             """)
 
@@ -941,9 +511,9 @@ with gr.Blocks(title="uRobot Tutor") as demo:
                             placeholder=(
                                 "<div style='display:flex;flex-direction:column;"
                                 "align-items:center;justify-content:center;"
-                                "height:100%;gap:10px;color:#9ca3af;padding:40px'>"
+                                "height:100%;gap:10px;color:#94a3b8;padding:40px'>"
                                 "<svg width='32' height='32' viewBox='0 0 24 24' fill='none' "
-                                "stroke='#d1d5db' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
+                                "stroke='#cbd5e1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
                                 "<path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/>"
                                 "</svg>"
                                 "<span style='font-size:0.84rem'>Carrega os teus materiais e coloca as tuas questoes</span>"
@@ -994,7 +564,7 @@ with gr.Blocks(title="uRobot Tutor") as demo:
                         )
                         flash_btn = gr.Button("Gerar Flashcards", variant="primary")
                         flash_output = gr.HTML(
-                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Flashcards.</div>'
+                            value='<div style="color:#64748b;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Flashcards.</div>'
                         )
 
                 # Completar Frases
@@ -1012,7 +582,7 @@ with gr.Blocks(title="uRobot Tutor") as demo:
                         n_fill = gr.Slider(minimum=3, maximum=10, value=5, step=1, label="Numero de exercicios")
                         fill_btn = gr.Button("Gerar Exercicios", variant="primary")
                         fill_output = gr.HTML(
-                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Exercicios.</div>'
+                            value='<div style="color:#64748b;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Exercicios.</div>'
                         )
 
                 # Comparar Conceitos
@@ -1026,7 +596,7 @@ with gr.Blocks(title="uRobot Tutor") as demo:
                         compare_b = gr.Textbox(label="Topico B", placeholder="ex: algoritmos geneticos", lines=1)
                         compare_btn = gr.Button("Comparar", variant="primary")
                         compare_output = gr.HTML(
-                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve os dois topicos e clica em Comparar.</div>'
+                            value='<div style="color:#64748b;font-size:0.84rem;text-align:center;padding:20px 0">Escreve os dois topicos e clica em Comparar.</div>'
                         )
 
                 # Questionarios
@@ -1047,7 +617,7 @@ with gr.Blocks(title="uRobot Tutor") as demo:
                         )
                         quiz_btn = gr.Button("Gerar Questionario", variant="primary")
                         quiz_output_html = gr.HTML(
-                            value='<div style="color:#6b7280;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Questionario.</div>',
+                            value='<div style="color:#64748b;font-size:0.84rem;text-align:center;padding:20px 0">Escreve um topico e clica em Gerar Questionario.</div>',
                             elem_id="quiz-area"
                         )
 
@@ -1071,6 +641,6 @@ with gr.Blocks(title="uRobot Tutor") as demo:
     )
 
 if __name__ == "__main__":
-    print("A iniciar uRobot Tutor...")
+    print("A iniciar Document Helper...")
     print("Acede em: http://localhost:7860")
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False, css=CSS)
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=False, css="style.css", theme=gr.themes.Base())
